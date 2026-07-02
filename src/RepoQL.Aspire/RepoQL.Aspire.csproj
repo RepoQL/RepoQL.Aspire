@@ -7,6 +7,7 @@
     <Description>Stream every Aspire resource's OpenTelemetry into a RepoQL workspace host with one AddRepoQL() call — durable, SQL-queryable telemetry for agents while the Aspire dashboard keeps its live view.</Description>
     <Authors>RepoQL</Authors>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageIcon>icon.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageTags>aspire;opentelemetry;otel;telemetry;observability;tracing;repoql</PackageTags>
     <PackageProjectUrl>https://github.com/RepoQL/RepoQL.Aspire</PackageProjectUrl>
@@ -21,6 +22,7 @@
 
   <ItemGroup>
     <None Include="../../README.md" Pack="true" PackagePath="/" />
+    <None Include="icon.png" Pack="true" PackagePath="/" />
   </ItemGroup>
 
   <ItemGroup>

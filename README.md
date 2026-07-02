@@ -1,3 +1,5 @@
+<img src="https://raw.githubusercontent.com/RepoQL/RepoQL.Aspire/main/src/RepoQL.Aspire/icon.png" width="96" alt="RepoQL" align="right" />
+
 # RepoQL.Aspire
 
 Stream every Aspire resource's OpenTelemetry into a [RepoQL](https://repoql.ai) workspace host with one call — durable, SQL-queryable telemetry for agents, while the Aspire dashboard keeps its live view.
