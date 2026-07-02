@@ -2,7 +2,7 @@
 
 # RepoQL.Aspire
 
-Stream every Aspire resource's OpenTelemetry into a [RepoQL](https://repoql.ai) workspace host with one call — durable, SQL-queryable telemetry for agents, while the Aspire dashboard keeps its live view.
+Stream every Aspire resource's OpenTelemetry into a [RepoQL](https://repoql.com) workspace host with one call — durable, SQL-queryable telemetry for agents, while the Aspire dashboard keeps its live view.
 
 ```csharp
 var builder = DistributedApplication.CreateBuilder(args);
@@ -27,9 +27,13 @@ That's the whole integration. On startup, every resource that would have exporte
 ## Requirements
 
 - [.NET Aspire](https://learn.microsoft.com/dotnet/aspire/) 13.4+
-- The [`rql`](https://repoql.ai) CLI on `PATH` (or point `REPOQL_CLI_PATH` at the binary). The AppHost adopts the workspace's running RepoQL host, or launches one automatically — the same discovery the RepoQL MCP client uses.
+- The `rql` CLI on `PATH` (or point `REPOQL_CLI_PATH` at the binary) — install it from [repoql.com](https://repoql.com). The AppHost adopts the workspace's running RepoQL host, or launches one automatically — the same discovery the RepoQL MCP client uses.
+
+If `rql` is missing or no host can be reached, the `repoql` resource reports the failure and the application starts normally with stock Aspire telemetry wiring — adding RepoQL never introduces a new way for your application to fail.
 
 ## How it works
+
+Everything happens in run mode only — local development. `aspire publish` output is untouched: the `repoql` resource is excluded from the manifest and no deployed environment is rewired.
 
 At `BeforeStartEvent`, the package runs `rql watch env` to register a telemetry run against the workspace host, then rewrites each OTLP-enabled resource's environment:
 
