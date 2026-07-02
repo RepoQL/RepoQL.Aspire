@@ -20,9 +20,10 @@ internal static class RepoQLWatchEnvClient
     public static async Task<RepoQLWatchEnvResult> RegisterRunAsync(
         string workingDirectory,
         string runName,
+        RepoQLForwardTarget? forward,
         CancellationToken cancellationToken)
     {
-        var (stdout, stderr, exitCode) = await RunAsync(workingDirectory, runName, cancellationToken).ConfigureAwait(false);
+        var (stdout, stderr, exitCode) = await RunAsync(workingDirectory, BuildArguments(runName, forward), cancellationToken).ConfigureAwait(false);
         if (exitCode != 0)
         {
             throw new InvalidOperationException(
@@ -30,6 +31,23 @@ internal static class RepoQLWatchEnvClient
         }
 
         return Parse(stdout);
+    }
+
+    internal static IReadOnlyList<string> BuildArguments(string runName, RepoQLForwardTarget? forward)
+    {
+        var arguments = new List<string> { "watch", "env", "--name", runName, "--format", "json" };
+        if (forward is not null)
+        {
+            arguments.Add("--forward");
+            arguments.Add(forward.Url);
+            if (forward.Headers is { Length: > 0 })
+            {
+                arguments.Add("--forward-headers");
+                arguments.Add(forward.Headers);
+            }
+        }
+
+        return arguments;
     }
 
     internal static RepoQLWatchEnvResult Parse(string stdout)
@@ -60,7 +78,7 @@ internal static class RepoQLWatchEnvClient
 
     private static async Task<(string Stdout, string Stderr, int ExitCode)> RunAsync(
         string workingDirectory,
-        string runName,
+        IReadOnlyList<string> arguments,
         CancellationToken cancellationToken)
     {
         // The first launch may bring up a workspace host; allow for that.
@@ -73,7 +91,7 @@ internal static class RepoQLWatchEnvClient
             Process? process;
             try
             {
-                process = Process.Start(CreateStartInfo(executable, workingDirectory, runName));
+                process = Process.Start(CreateStartInfo(executable, workingDirectory, arguments));
             }
             catch (Win32Exception ex)
             {
@@ -101,7 +119,7 @@ internal static class RepoQLWatchEnvClient
             lastError);
     }
 
-    private static ProcessStartInfo CreateStartInfo(string executable, string workingDirectory, string runName)
+    private static ProcessStartInfo CreateStartInfo(string executable, string workingDirectory, IReadOnlyList<string> arguments)
     {
         var info = new ProcessStartInfo
         {
@@ -111,12 +129,8 @@ internal static class RepoQLWatchEnvClient
             RedirectStandardError = true,
             UseShellExecute = false,
         };
-        info.ArgumentList.Add("watch");
-        info.ArgumentList.Add("env");
-        info.ArgumentList.Add("--name");
-        info.ArgumentList.Add(runName);
-        info.ArgumentList.Add("--format");
-        info.ArgumentList.Add("json");
+        foreach (var argument in arguments)
+            info.ArgumentList.Add(argument);
         return info;
     }
 

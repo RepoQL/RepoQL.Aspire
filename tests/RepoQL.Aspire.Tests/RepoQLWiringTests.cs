@@ -1,5 +1,7 @@
 using Aspire.Hosting.ApplicationModel;
 using AwesomeAssertions;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Core;
 
 namespace RepoQL.Aspire.Tests;
@@ -75,5 +77,47 @@ public class RepoQLWiringTests
 
         var env = await EnvironmentVariableEvaluator.GetEnvironmentVariablesAsync(plain);
         env.Should().NotContainKey("OTEL_EXPORTER_OTLP_ENDPOINT");
+    }
+
+    [Test]
+    public void ResolveDashboardForward_UsesTheHttpIngestionUrlAndApiKey()
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["ASPIRE_DASHBOARD_OTLP_HTTP_ENDPOINT_URL"] = "http://localhost:19201",
+            ["AppHost:OtlpApiKey"] = "secret",
+        }).Build();
+
+        var forward = RepoQLWiring.ResolveDashboardForward(configuration, NullLogger.Instance);
+
+        forward.Should().NotBeNull();
+        forward!.Url.Should().Be("http://localhost:19201");
+        forward.Headers.Should().Be("x-otlp-api-key=secret");
+    }
+
+    [Test]
+    public void ResolveDashboardForward_WithoutAnApiKey_SendsNoHeaders()
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["ASPIRE_DASHBOARD_OTLP_HTTP_ENDPOINT_URL"] = "http://localhost:19201",
+        }).Build();
+
+        var forward = RepoQLWiring.ResolveDashboardForward(configuration, NullLogger.Instance);
+
+        forward.Should().NotBeNull();
+        forward!.Headers.Should().BeNull();
+    }
+
+    [Test]
+    public void ResolveDashboardForward_WithoutTheHttpEndpoint_ReturnsNullEvenIfGrpcIsConfigured()
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            // The gRPC ingestion URL cannot receive the OTLP/HTTP forward leg.
+            ["ASPIRE_DASHBOARD_OTLP_ENDPOINT_URL"] = "http://localhost:19200",
+        }).Build();
+
+        RepoQLWiring.ResolveDashboardForward(configuration, NullLogger.Instance).Should().BeNull();
     }
 }

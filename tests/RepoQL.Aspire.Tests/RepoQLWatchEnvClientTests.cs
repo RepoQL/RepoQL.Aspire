@@ -49,4 +49,34 @@ public class RepoQLWatchEnvClientTests
 
         act.Should().Throw<InvalidOperationException>().WithMessage("*JSON object*");
     }
+
+    [Test]
+    public void BuildArguments_WithoutForward_RegistersAPlainRun()
+    {
+        RepoQLWatchEnvClient.BuildArguments("my-app", forward: null)
+            .Should().Equal("watch", "env", "--name", "my-app", "--format", "json");
+    }
+
+    [Test]
+    public void BuildArguments_WithForward_PassesUrlAndHeaders()
+    {
+        var forward = new RepoQLForwardTarget("http://localhost:19201", "x-otlp-api-key=secret");
+
+        RepoQLWatchEnvClient.BuildArguments("my-app", forward)
+            .Should().Equal(
+                "watch", "env", "--name", "my-app", "--format", "json",
+                "--forward", "http://localhost:19201",
+                "--forward-headers", "x-otlp-api-key=secret");
+    }
+
+    [Test]
+    public void BuildArguments_WithForwardButNoHeaders_OmitsTheHeadersFlag()
+    {
+        var forward = new RepoQLForwardTarget("http://localhost:19201", Headers: null);
+
+        RepoQLWatchEnvClient.BuildArguments("my-app", forward)
+            .Should().Equal(
+                "watch", "env", "--name", "my-app", "--format", "json",
+                "--forward", "http://localhost:19201");
+    }
 }

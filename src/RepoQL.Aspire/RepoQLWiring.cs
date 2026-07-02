@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 using Aspire.Hosting;
 using Aspire.Hosting.ApplicationModel;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -25,11 +26,12 @@ internal static class RepoQLWiring
     {
         var logger = evt.Services.GetRequiredService<ILoggerFactory>().CreateLogger("RepoQL.Aspire");
         var notifications = evt.Services.GetRequiredService<ResourceNotificationService>();
+        var forward = ResolveDashboardForward(evt.Services.GetRequiredService<IConfiguration>(), logger);
 
         RepoQLWatchEnvResult run;
         try
         {
-            run = await RepoQLWatchEnvClient.RegisterRunAsync(appHostDirectory, runName, cancellationToken).ConfigureAwait(false);
+            run = await RepoQLWatchEnvClient.RegisterRunAsync(appHostDirectory, runName, forward, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -56,6 +58,32 @@ internal static class RepoQLWiring
         logger.LogInformation(
             "RepoQL is streaming this application's telemetry — run {RunId}, collector {BaseUrl}",
             run.RunId, run.BaseUrl);
+    }
+
+    /// <summary>
+    /// Resolves the Aspire dashboard's OTLP/HTTP ingestion endpoint as the run's forward target so
+    /// the human's live view keeps working while RepoQL indexes the stream.
+    /// </summary>
+    /// <remarks>
+    /// Config-first because BeforeStartEvent runs before the dashboard's endpoints allocate. The
+    /// forward leg speaks OTLP/HTTP, so only the HTTP ingestion URL qualifies — the default
+    /// ASPIRE_DASHBOARD_OTLP_ENDPOINT_URL is gRPC and cannot receive it.
+    /// </remarks>
+    internal static RepoQLForwardTarget? ResolveDashboardForward(IConfiguration configuration, ILogger logger)
+    {
+        var httpUrl = configuration["ASPIRE_DASHBOARD_OTLP_HTTP_ENDPOINT_URL"];
+        if (string.IsNullOrWhiteSpace(httpUrl))
+        {
+            logger.LogInformation(
+                "No dashboard OTLP/HTTP endpoint configured — telemetry is indexed by RepoQL but will not appear in the Aspire dashboard. " +
+                "Set ASPIRE_DASHBOARD_OTLP_HTTP_ENDPOINT_URL (e.g. in the AppHost's launchSettings.json) to light both up.");
+            return null;
+        }
+
+        var apiKey = configuration["AppHost:OtlpApiKey"];
+        return new RepoQLForwardTarget(
+            httpUrl,
+            string.IsNullOrWhiteSpace(apiKey) ? null : $"x-otlp-api-key={apiKey}");
     }
 
     /// <summary>
