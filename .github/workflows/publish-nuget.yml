@@ -4,7 +4,9 @@ name: publish-nuget
 # Triggers: pushing a version tag (v0.1.0) or manual dispatch.
 # The csproj <Version> is the single source of truth; a tag that
 # disagrees with it fails loudly instead of publishing a mismatch.
-# Requires the NUGET_API_KEY repository secret.
+# Auth is NuGet Trusted Publishing (OIDC): the nuget.org policy is bound
+# to this repo, this workflow file name, and the production environment —
+# no long-lived API key secret exists.
 
 on:
   push:
@@ -17,6 +19,10 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
 
@@ -43,9 +49,15 @@ jobs:
       - name: Pack
         run: dotnet pack src/RepoQL.Aspire --configuration Release --no-build --output artifacts/packages
 
+      - name: NuGet login (trusted publishing)
+        id: login
+        uses: NuGet/login@v1
+        with:
+          user: StuartWilson
+
       - name: Push to NuGet.org
         run: >
           dotnet nuget push "artifacts/packages/*.nupkg"
-          --api-key "${{ secrets.NUGET_API_KEY }}"
+          --api-key "${{ steps.login.outputs.NUGET_API_KEY }}"
           --source https://api.nuget.org/v3/index.json
           --skip-duplicate
