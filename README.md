@@ -27,7 +27,7 @@ That's the whole integration. On startup, every resource that would have exporte
 ## Requirements
 
 - [.NET Aspire](https://learn.microsoft.com/dotnet/aspire/) 13.4+
-- The `rql` CLI on `PATH` (or point `REPOQL_CLI_PATH` at the binary) — install it from [repoql.com](https://repoql.com). The AppHost adopts the workspace's running RepoQL host, or launches one automatically — the same discovery the RepoQL MCP client uses.
+- The `rql` CLI on `PATH` (or point `REPOQL_CLI_PATH` at the binary) — install it from [github.com/RepoQL/RepoQL](https://github.com/RepoQL/RepoQL). The AppHost adopts the workspace's running RepoQL host, or launches one automatically — the same discovery the RepoQL MCP client uses.
 
 If `rql` is missing or no host can be reached, the `repoql` resource reports the failure and the application starts normally with stock Aspire telemetry wiring — adding RepoQL never introduces a new way for your application to fail.
 
