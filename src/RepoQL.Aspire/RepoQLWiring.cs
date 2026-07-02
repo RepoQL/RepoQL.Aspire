@@ -48,16 +48,34 @@ internal static class RepoQLWiring
         RedirectTelemetry(evt.Model.Resources, resource, run);
         RegisterCompletionHook(evt.Services, run, logger);
 
+        AnnotateDashboardLink(resource, run);
+
         await notifications.PublishUpdateAsync(resource, snapshot => snapshot with
         {
             State = new ResourceStateSnapshot(KnownResourceStates.Running, KnownResourceStateStyles.Success),
-            Urls = [new UrlSnapshot("repoql-dashboard", run.BaseUrl.ToString().TrimEnd('/'), IsInternal: false)],
             Properties = [new("repoql.run.id", run.RunId)],
         }).ConfigureAwait(false);
 
         logger.LogInformation(
             "RepoQL is streaming this application's telemetry — run {RunId}, collector {BaseUrl}",
             run.RunId, run.BaseUrl);
+    }
+
+    /// <summary>
+    /// Adds the RepoQL dashboard link as a URL annotation so it survives URL processing.
+    /// </summary>
+    /// <remarks>
+    /// The link must be a <see cref="ResourceUrlAnnotation"/>: when endpoints allocate, the
+    /// orchestrator recomputes every resource's snapshot Urls from annotations and replaces the
+    /// array wholesale — a URL published only on the snapshot is wiped before anyone sees it.
+    /// </remarks>
+    internal static void AnnotateDashboardLink(RepoQLResource resource, RepoQLWatchEnvResult run)
+    {
+        resource.Annotations.Add(new ResourceUrlAnnotation
+        {
+            Url = run.BaseUrl.ToString().TrimEnd('/'),
+            DisplayText = "RepoQL dashboard",
+        });
     }
 
     /// <summary>

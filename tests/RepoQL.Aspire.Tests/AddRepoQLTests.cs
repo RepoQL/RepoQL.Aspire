@@ -21,6 +21,18 @@ public class AddRepoQLTests
     }
 
     [Test]
+    public void AddRepoQL_WearsTheEyeIcon()
+    {
+        var builder = DistributedApplication.CreateBuilder();
+
+        var repoql = builder.AddRepoQL();
+
+        repoql.Resource.TryGetLastAnnotation<ResourceIconAnnotation>(out var icon).Should().BeTrue();
+        icon!.IconName.Should().Be("Eye");
+        icon.IconVariant.Should().Be(IconVariant.Filled);
+    }
+
+    [Test]
     public void AddRepoQL_HonorsACustomName()
     {
         var builder = DistributedApplication.CreateBuilder();

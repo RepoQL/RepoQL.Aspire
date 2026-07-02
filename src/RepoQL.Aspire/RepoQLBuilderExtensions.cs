@@ -29,6 +29,7 @@ public static class RepoQLBuilderExtensions
                 State = KnownResourceStates.Waiting,
                 Properties = [],
             })
+            .WithIconName("Eye")
             .ExcludeFromManifest();
 
         if (builder.ExecutionContext.IsRunMode)

@@ -19,6 +19,20 @@ public class RepoQLWiringTests
     }
 
     [Test]
+    public async Task AnnotateDashboardLink_AddsAUrlAnnotationTheOrchestratorWillSurface()
+    {
+        var repoql = new RepoQLResource("repoql");
+
+        RepoQLWiring.AnnotateDashboardLink(repoql, Run());
+
+        repoql.TryGetAnnotationsOfType<ResourceUrlAnnotation>(out var annotations).Should().BeTrue();
+        var url = annotations!.Should().ContainSingle().Subject;
+        url.Url.Should().Be("http://127.0.0.1:63333");
+        url.DisplayText.Should().Be("RepoQL dashboard");
+        await Task.CompletedTask;
+    }
+
+    [Test]
     public async Task RedirectTelemetry_PointsOtlpResourceAtCollector()
     {
         var api = OtlpResource();
