@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/RepoQL.Aspire/RepoQL.Aspire.csproj" />
+  </Folder>
+  <Folder Name="/samples/">
+    <Project Path="samples/RepoQL.Aspire.Sample.AppHost/RepoQL.Aspire.Sample.AppHost.csproj" />
+    <Project Path="samples/RepoQL.Aspire.Sample.ApiService/RepoQL.Aspire.Sample.ApiService.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/RepoQL.Aspire.Tests/RepoQL.Aspire.Tests.csproj" />
+  </Folder>
+</Solution>

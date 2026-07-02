@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <PackageId>RepoQL.Aspire</PackageId>
+    <Description>Stream every Aspire resource's OpenTelemetry into a RepoQL workspace host with one AddRepoQL() call — durable, SQL-queryable telemetry for agents while the Aspire dashboard keeps its live view.</Description>
+    <Authors>RepoQL</Authors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Aspire.Hosting" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="RepoQL.Aspire.Tests" />
+  </ItemGroup>
+
+</Project>
