@@ -2,7 +2,7 @@
 
 # RepoQL.Aspire
 
-Stream every Aspire resource's OpenTelemetry into a [RepoQL](https://repoql.com) workspace host with one call — durable, SQL-queryable telemetry for agents, while the Aspire dashboard keeps its live view.
+Stream every Aspire resource's OpenTelemetry into a [RepoQL](https://repoql.com) workspace host with one call. Agents can query each run with SQL while you investigate, and the Aspire dashboard keeps its live view.
 
 ```csharp
 var builder = DistributedApplication.CreateBuilder(args);
@@ -14,11 +14,11 @@ builder.AddProject<Projects.MyApi>("api");
 builder.Build().Run();
 ```
 
-That's the whole integration. On startup, every resource that would have exported OTLP to the Aspire dashboard exports to RepoQL instead; RepoQL records the stream durably and relays it byte-for-byte back to the dashboard. Both audiences see the same telemetry — the dashboard live, RepoQL forever.
+That's the whole integration. On startup, every resource that would have exported OTLP to the Aspire dashboard exports to RepoQL instead; RepoQL records the stream and relays it byte-for-byte back to the dashboard. Both audiences see the same telemetry. The dashboard shows it live, and RepoQL keeps each run queryable for about six hours after the AppHost stops.
 
 ## What you get
 
-- **A durable record.** The Aspire dashboard holds telemetry in memory and forgets on restart. RepoQL writes every span, log, and metric to a per-workspace DuckDB you can query days later.
+- **A record that outlives the dashboard.** The Aspire dashboard holds telemetry in memory and forgets it on restart. RepoQL writes every span, log, and metric to a per-workspace DuckDB file. Restart the AppHost after a fix, and the previous run is still there for your agent to compare with the new one.
 - **SQL over your telemetry.** `rql query "SELECT * FROM watch.summary()"` — or errors, span statistics, trace trees, and raw payloads. Ask `watch.surface` what's available.
 - **Agent-ready.** Any agent with the RepoQL MCP server (or the `rql` CLI) can interrogate the run: what failed, what was slow, what changed between runs.
 - **The dashboard keeps working.** Forwarding is a byte-verbatim OTLP/HTTP relay. Traces, structured logs, and metrics appear in the Aspire dashboard exactly as if the apps exported directly.
@@ -70,7 +70,13 @@ rql query "SELECT * FROM watch.span_stats('<run-id>')"
 rql query "SELECT * FROM watch.surface"            # everything queryable
 ```
 
-When the AppHost stops, the run completes cleanly and remains queryable.
+## How long RepoQL keeps a run
+
+The workspace host deletes old telemetry when it starts and once an hour after that. These rules decide what it deletes:
+
+- **About six hours after the AppHost stops.** When the AppHost shuts down, the package marks its run complete. The host deletes a run once it has been complete for six hours.
+- **No age limit while the AppHost runs.** The six-hour clock starts when the run completes, however long the AppHost ran before that.
+- **A 512 MiB cap on the whole store.** If the store is still larger than 512 MiB after expired runs are deleted, the host moves it aside and starts an empty one. Queries no longer see telemetry recorded before then, even for a run that is still going.
 
 ## License
 
