@@ -27,9 +27,15 @@ That's the whole integration. On startup, every resource that would have exporte
 ## Requirements
 
 - [.NET Aspire](https://learn.microsoft.com/dotnet/aspire/) 13.4+
-- The `rql` CLI on `PATH` (or point `REPOQL_CLI_PATH` at the binary) — install it from [github.com/RepoQL/RepoQL](https://github.com/RepoQL/RepoQL). The AppHost adopts the workspace's running RepoQL host, or launches one automatically — the same discovery the RepoQL MCP client uses.
+- The `rql` CLI on `PATH` (or point `REPOQL_CLI_PATH` at the binary) — install it from [github.com/RepoQL/RepoQL](https://github.com/RepoQL/RepoQL). The AppHost adopts the workspace's running RepoQL host, or launches one automatically, as `rql query` does. The AppHost's directory must sit inside a git repository or a directory where you have run `rql init`.
+
+Some rql releases, 1.7.9 among them, cannot launch a host for the AppHost. They report "No host is running for this repository", and a host that no RepoQL client is using can stop partway through a run. If you see that message, update rql, or run `rql serve` in the workspace before you start the AppHost.
 
 If `rql` is missing or no host can be reached, the `repoql` resource reports the failure and the application starts normally with stock Aspire telemetry wiring — adding RepoQL never introduces a new way for your application to fail.
+
+## How long the host stays up
+
+The AppHost shares the workspace's RepoQL host with any agent that uses it. While your resources export telemetry, the host stays up. After they stop, a host that `rql` launched exits once it has been idle for its idle window — 15 minutes when the AppHost launched it — unless an agent is still connected. A host you started with `rql serve` stays up until you stop it.
 
 ## How it works
 
