@@ -1,6 +1,10 @@
+using System.Diagnostics;
+using Aspire.Hosting;
 using Aspire.Hosting.ApplicationModel;
 using AwesomeAssertions;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Core;
 
@@ -8,6 +12,8 @@ namespace RepoQL.Aspire.Tests;
 
 public class RepoQLWiringTests
 {
+    private const string Disabled = "RepoQL telemetry streaming is disabled: ";
+
     private static RepoQLWatchEnvResult Run(string runId = "run123")
         => new(new Dictionary<string, string>(), runId, new Uri("http://127.0.0.1:63333/"));
 
@@ -16,6 +22,97 @@ public class RepoQLWiringTests
         var resource = new ContainerResource(name);
         resource.Annotations.Add(new OtlpExporterAnnotation());
         return resource;
+    }
+
+    /// <summary>A built (not started) application with a RepoQL resource and one OTLP-enabled resource.</summary>
+    private sealed class TestApp : IDisposable
+    {
+        private readonly DistributedApplication _app;
+
+        public TestApp()
+        {
+            var builder = DistributedApplication.CreateBuilder(new DistributedApplicationOptions { DisableDashboard = true });
+            builder.Services.AddLogging(logging => logging.AddProvider(Logs));
+            RepoQL = builder.AddRepoQL().Resource;
+            Api = builder.AddContainer("api", "example/api").WithOtlpExporter().Resource;
+            _app = builder.Build();
+        }
+
+        public LogCapture Logs { get; } = new();
+
+        public RepoQLResource RepoQL { get; }
+
+        public IResource Api { get; }
+
+        public Task WireAsync(RepoQLWiring.RunRegistrar registerRun, CancellationToken cancellationToken = default)
+            => RepoQLWiring.WireAsync(
+                RepoQL,
+                "/app",
+                "app",
+                new BeforeStartEvent(_app.Services, _app.Services.GetRequiredService<DistributedApplicationModel>()),
+                registerRun,
+                cancellationToken);
+
+        public string? RepoQLState
+            => _app.Services.GetRequiredService<ResourceNotificationService>().TryGetCurrentState(RepoQL.Name, out var current)
+                ? current.Snapshot.State?.Text
+                : null;
+
+        public void Dispose() => _app.Dispose();
+    }
+
+    [Test]
+    public async Task WireAsync_WhenRegistrationTimesOut_FallsBackToStockWiring()
+    {
+        using var app = new TestApp();
+        var apiCallbacks = app.Api.Annotations.OfType<EnvironmentCallbackAnnotation>().Count();
+
+        await app.WireAsync((_, _, _, _) => Task.FromException<RepoQLWatchEnvResult>(
+            new TimeoutException("'rql watch env' did not finish within 60 seconds and was stopped.")));
+
+        app.RepoQLState.Should().Be(KnownResourceStates.FailedToStart);
+        app.Logs.Entries.Should().ContainSingle(entry => entry.Level == LogLevel.Warning)
+            .Which.Message.Should().Be(
+                Disabled + "'rql watch env' did not finish within 60 seconds and was stopped. " +
+                "The application runs with stock Aspire telemetry wiring.");
+        app.Api.Annotations.OfType<EnvironmentCallbackAnnotation>().Should().HaveCount(apiCallbacks);
+        app.RepoQL.Annotations.OfType<ResourceUrlAnnotation>().Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task WireAsync_WhenACancellationTheApplicationDidNotAskForEscapes_FallsBackToStockWiring()
+    {
+        // 0.1.2 let an internal timeout escape as TaskCanceledException, failing the AppHost's start.
+        using var app = new TestApp();
+        var apiCallbacks = app.Api.Annotations.OfType<EnvironmentCallbackAnnotation>().Count();
+
+        await app.WireAsync((_, _, _, _) => Task.FromCanceled<RepoQLWatchEnvResult>(new CancellationToken(canceled: true)));
+
+        app.RepoQLState.Should().Be(KnownResourceStates.FailedToStart);
+        app.Logs.Entries.Should().ContainSingle(entry => entry.Level == LogLevel.Warning)
+            .Which.Message.Should().StartWith(Disabled);
+        app.Api.Annotations.OfType<EnvironmentCallbackAnnotation>().Should().HaveCount(apiCallbacks);
+    }
+
+    [Test]
+    public async Task WireAsync_WhenTheApplicationCancels_PropagatesTheCancellation()
+    {
+        using var app = new TestApp();
+        using var cancellation = new CancellationTokenSource();
+
+        var wiring = app.WireAsync(
+            async (_, _, _, cancellationToken) =>
+            {
+                await Task.Delay(Timeout.Infinite, cancellationToken);
+                throw new UnreachableException();
+            },
+            cancellation.Token);
+        await cancellation.CancelAsync();
+
+        var act = () => wiring;
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        app.RepoQLState.Should().NotBe(KnownResourceStates.FailedToStart);
+        app.Logs.Entries.Should().NotContain(entry => entry.Message.StartsWith(Disabled));
     }
 
     [Test]

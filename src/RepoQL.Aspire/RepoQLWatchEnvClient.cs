@@ -17,6 +17,12 @@ internal static class RepoQLWatchEnvClient
     private const string CliPathVariable = "REPOQL_CLI_PATH";
     private const string CollectorPathSuffix = "/api/otel";
 
+    // The first launch may bring up a workspace host; allow for that.
+    private static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(60);
+
+    // How long a killed CLI may take to exit before it is left to the operating system.
+    private static readonly TimeSpan KillGrace = TimeSpan.FromSeconds(5);
+
     public static async Task<RepoQLWatchEnvResult> RegisterRunAsync(
         string workingDirectory,
         string runName,
@@ -76,17 +82,35 @@ internal static class RepoQLWatchEnvClient
         return new RepoQLWatchEnvResult(environment, runId, baseUrl);
     }
 
-    private static async Task<(string Stdout, string Stderr, int ExitCode)> RunAsync(
+    /// <summary>
+    /// Runs the installed <c>rql</c> CLI and returns its output, giving up after the default timeout.
+    /// </summary>
+    internal static Task<(string Stdout, string Stderr, int ExitCode)> RunAsync(
         string workingDirectory,
         IReadOnlyList<string> arguments,
         CancellationToken cancellationToken)
+        => RunAsync(CandidateExecutables(), workingDirectory, arguments, DefaultTimeout, TimeProvider.System, cancellationToken);
+
+    /// <summary>
+    /// Runs the first candidate that starts and returns its output, stopping the process whenever it stops waiting.
+    /// </summary>
+    /// <remarks>
+    /// The caller's cancellation propagates as <see cref="OperationCanceledException"/>. Outrunning
+    /// <paramref name="timeout"/> is a failure, not a cancellation, so it surfaces as <see cref="TimeoutException"/>.
+    /// </remarks>
+    internal static async Task<(string Stdout, string Stderr, int ExitCode)> RunAsync(
+        IEnumerable<string> executables,
+        string workingDirectory,
+        IReadOnlyList<string> arguments,
+        TimeSpan timeout,
+        TimeProvider timeProvider,
+        CancellationToken cancellationToken)
     {
-        // The first launch may bring up a workspace host; allow for that.
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(TimeSpan.FromSeconds(60));
+        using var deadline = new CancellationTokenSource(timeout, timeProvider);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, deadline.Token);
 
         Exception? lastError = null;
-        foreach (var executable in CandidateExecutables())
+        foreach (var executable in executables)
         {
             Process? process;
             try
@@ -106,10 +130,24 @@ internal static class RepoQLWatchEnvClient
 
             using (process)
             {
-                var stdoutTask = process.StandardOutput.ReadToEndAsync(timeout.Token);
-                var stderrTask = process.StandardError.ReadToEndAsync(timeout.Token);
-                await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
-                return (await stdoutTask.ConfigureAwait(false), await stderrTask.ConfigureAwait(false), process.ExitCode);
+                try
+                {
+                    var stdoutTask = process.StandardOutput.ReadToEndAsync(linked.Token);
+                    var stderrTask = process.StandardError.ReadToEndAsync(linked.Token);
+                    await process.WaitForExitAsync(linked.Token).ConfigureAwait(false);
+                    return (await stdoutTask.ConfigureAwait(false), await stderrTask.ConfigureAwait(false), process.ExitCode);
+                }
+                catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+                {
+                    throw new TimeoutException(
+                        $"'rql {Command(arguments)}' did not finish within {timeout.TotalSeconds:0.###} seconds and was stopped. " +
+                        "Check the workspace host with 'rql host status', then restart the AppHost.",
+                        ex);
+                }
+                finally
+                {
+                    await StopAsync(process).ConfigureAwait(false);
+                }
             }
         }
 
@@ -118,6 +156,34 @@ internal static class RepoQLWatchEnvClient
             "Install RepoQL (https://repoql.ai) or set REPOQL_CLI_PATH to the rql binary.",
             lastError);
     }
+
+    /// <summary>
+    /// Kills the CLI if it is still running, then waits briefly for it to exit.
+    /// </summary>
+    /// <remarks>
+    /// Only the process itself is killed, never its tree: <c>rql watch env</c> may be launching the workspace host
+    /// as its child, and that host is shared infrastructure whose lifetime is independent of this AppHost.
+    /// </remarks>
+    private static async Task StopAsync(Process process)
+    {
+        try
+        {
+            if (process.HasExited)
+                return;
+
+            process.Kill(entireProcessTree: false);
+            using var grace = new CancellationTokenSource(KillGrace);
+            await process.WaitForExitAsync(grace.Token).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or Win32Exception or OperationCanceledException)
+        {
+            // It exited on its own, could not be signalled, or outlived the grace period — nothing more to do.
+        }
+    }
+
+    // The subcommand without its options: those can carry forwarding headers, which must never reach a log.
+    private static string Command(IReadOnlyList<string> arguments)
+        => string.Join(' ', arguments.TakeWhile(argument => !argument.StartsWith('-')));
 
     private static ProcessStartInfo CreateStartInfo(string executable, string workingDirectory, IReadOnlyList<string> arguments)
     {

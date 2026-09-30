@@ -1,5 +1,7 @@
 using AwesomeAssertions;
+using Microsoft.Extensions.Time.Testing;
 using TUnit.Core;
+using TUnit.Core.Enums;
 
 namespace RepoQL.Aspire.Tests;
 
@@ -78,5 +80,79 @@ public class RepoQLWatchEnvClientTests
             .Should().Equal(
                 "watch", "env", "--name", "my-app", "--format", "json",
                 "--forward", "http://localhost:19201");
+    }
+
+    [Test]
+    [ExcludeOn(OS.Windows)] // the stand-in CLI is a POSIX shell script
+    public async Task RunAsync_ReturnsTheCliOutputAndExitCode()
+    {
+        using var cli = StandInCli.Answers(stdout: ValidOutput, stderr: "[rql watch env] run: 6c9e", exitCode: 3);
+
+        var (stdout, stderr, exitCode) = await RepoQLWatchEnvClient.RunAsync(
+            [cli.Path], cli.WorkingDirectory, ["watch", "env"], TimeSpan.FromSeconds(60), new FakeTimeProvider(), CancellationToken.None);
+
+        stdout.Should().Be(ValidOutput);
+        stderr.Should().Be("[rql watch env] run: 6c9e");
+        exitCode.Should().Be(3);
+    }
+
+    [Test]
+    [ExcludeOn(OS.Windows)] // the stand-in CLI is a POSIX shell script
+    public async Task RunAsync_WhenTheCliHangs_StopsItAndThrowsATimeoutThatNamesNoSecrets()
+    {
+        using var cli = StandInCli.Hangs();
+        var time = new FakeTimeProvider();
+        var arguments = RepoQLWatchEnvClient.BuildArguments("my-app", new RepoQLForwardTarget("http://localhost:19201", "x-otlp-api-key=secret"));
+
+        var run = RepoQLWatchEnvClient.RunAsync(
+            [cli.Path], cli.WorkingDirectory, arguments, TimeSpan.FromSeconds(60), time, CancellationToken.None);
+        var pid = await cli.WaitUntilHangingAsync(run);
+        time.Advance(TimeSpan.FromSeconds(59));
+        run.IsCompleted.Should().BeFalse("the timeout has not elapsed yet");
+        time.Advance(TimeSpan.FromSeconds(1));
+
+        var act = () => run;
+        var timeout = await act.Should().ThrowAsync<TimeoutException>();
+        timeout.WithMessage("'rql watch env' did not finish within 60 seconds and was stopped.*")
+            .Which.Message.Should().NotContain("secret");
+        StandInCli.IsRunning(pid).Should().BeFalse();
+    }
+
+    [Test]
+    [ExcludeOn(OS.Windows)] // the stand-in CLI is a POSIX shell script
+    public async Task RunAsync_WhenTheCallerCancels_StopsTheCliAndPropagatesTheCancellation()
+    {
+        using var cli = StandInCli.Hangs();
+        using var cancellation = new CancellationTokenSource();
+
+        var run = RepoQLWatchEnvClient.RunAsync(
+            [cli.Path], cli.WorkingDirectory, ["watch", "env"], TimeSpan.FromSeconds(60), new FakeTimeProvider(), cancellation.Token);
+        var pid = await cli.WaitUntilHangingAsync(run);
+        await cancellation.CancelAsync();
+
+        var act = () => run;
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        StandInCli.IsRunning(pid).Should().BeFalse();
+    }
+
+    [Test]
+    [ExcludeOn(OS.Windows)] // the stand-in CLI is a POSIX shell script
+    public async Task RunAsync_WhenTheCliHangs_LeavesAHostItLaunchedRunning()
+    {
+        using var cli = StandInCli.Hangs(launchesHost: true);
+        var time = new FakeTimeProvider();
+
+        var run = RepoQLWatchEnvClient.RunAsync(
+            [cli.Path], cli.WorkingDirectory, ["watch", "env"], TimeSpan.FromSeconds(60), time, CancellationToken.None);
+        var pid = await cli.WaitUntilHangingAsync(run);
+        time.Advance(TimeSpan.FromSeconds(60));
+
+        var act = () => run;
+        await act.Should().ThrowAsync<TimeoutException>();
+        StandInCli.IsRunning(pid).Should().BeFalse();
+        var hostPid = cli.HostPid;
+        hostPid.Should().NotBeNull();
+        StandInCli.IsRunning(hostPid!.Value).Should().BeTrue(
+            "the workspace host is shared infrastructure whose lifetime is independent of the AppHost");
     }
 }
