@@ -120,11 +120,11 @@ public class RepoQLWiringTests
     {
         var repoql = new RepoQLResource("repoql");
 
-        RepoQLWiring.AnnotateDashboardLink(repoql, Run());
+        RepoQLWiring.AnnotateDashboardLink(repoql, "http://127.0.0.1:63333/#k=not-a-real-key");
 
         repoql.TryGetAnnotationsOfType<ResourceUrlAnnotation>(out var annotations).Should().BeTrue();
         var url = annotations!.Should().ContainSingle().Subject;
-        url.Url.Should().Be("http://127.0.0.1:63333");
+        url.Url.Should().Be("http://127.0.0.1:63333/#k=not-a-real-key");
         url.DisplayText.Should().Be("RepoQL dashboard");
         await Task.CompletedTask;
     }
