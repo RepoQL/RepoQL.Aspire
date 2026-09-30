@@ -8,9 +8,10 @@ namespace RepoQL.Aspire;
 /// Registers a telemetry run against the workspace's RepoQL host by invoking <c>rql watch env</c>.
 /// </summary>
 /// <remarks>
-/// <c>rql watch env</c> owns discovery end to end: it finds the host for the working directory,
-/// auto-launches one when none is running (the same path the MCP client uses), registers the run,
-/// and prints the composed OTLP environment as JSON on stdout.
+/// <c>rql watch env</c> owns discovery end to end: it finds the host for the working directory, launches one
+/// when none is running (as <c>rql query</c> does), registers the run, and prints the composed OTLP environment
+/// as JSON on stdout. Some rql releases, 1.7.9 among them, never launch a host from <c>rql watch env</c>. They
+/// fail with "No host is running for this repository", and the AppHost falls back to stock telemetry wiring.
 /// </remarks>
 internal static class RepoQLWatchEnvClient
 {
@@ -33,7 +34,7 @@ internal static class RepoQLWatchEnvClient
         if (exitCode != 0)
         {
             throw new InvalidOperationException(
-                $"'rql watch env' exited with code {exitCode}. {FirstLine(stderr)}");
+                $"'rql watch env' exited with code {exitCode}. {FailureReason(stderr)}");
         }
 
         return Parse(stdout);
@@ -215,10 +216,28 @@ internal static class RepoQLWatchEnvClient
             yield return Path.Combine(home, ".local", "bin", binaryName);
     }
 
-    private static string FirstLine(string text)
+    /// <summary>
+    /// Picks the line of the CLI's stderr that says why it failed.
+    /// </summary>
+    /// <remarks>
+    /// rql writes its failure last, after bracketed progress lines such as <c>[rql] Launching host: …</c> or the
+    /// <c>[host …]</c> lines it relays from a host it is starting. A failure can span several lines, and its first
+    /// line states the cause. So the reason is the first line that is not bracketed progress, or the last line when
+    /// every line is progress.
+    /// </remarks>
+    internal static string FailureReason(string stderr)
     {
-        var trimmed = text.AsSpan().TrimStart();
-        var newline = trimmed.IndexOfAny('\r', '\n');
-        return (newline < 0 ? trimmed : trimmed[..newline]).ToString();
+        var reason = string.Empty;
+        foreach (var line in stderr.Split('\n'))
+        {
+            var trimmed = line.Trim();
+            if (trimmed.Length == 0)
+                continue;
+            if (!trimmed.StartsWith('['))
+                return trimmed;
+            reason = trimmed;
+        }
+
+        return reason;
     }
 }

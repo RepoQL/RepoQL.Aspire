@@ -53,6 +53,44 @@ public class RepoQLWatchEnvClientTests
     }
 
     [Test]
+    public void FailureReason_SkipsLaunchProgressToReportTheFailure()
+    {
+        const string stderr =
+            """
+            [rql] Launching host: /home/dev/.local/bin/rql serve --path "/src/app" --implicit-start
+            [host 08:20:55] Loading index
+            Watch env failed: Host did not become healthy within 120000ms (socket: /tmp/repoql.sock).
+
+            """;
+
+        RepoQLWatchEnvClient.FailureReason(stderr)
+            .Should().Be("Watch env failed: Host did not become healthy within 120000ms (socket: /tmp/repoql.sock).");
+    }
+
+    [Test]
+    public void FailureReason_ReportsTheFirstLineOfAMultiLineFailure()
+    {
+        const string stderr =
+            """
+            '/src/app' is not a RepoQL workspace — it has no .git directory and no .repoql marker.
+
+            How RepoQL chose this directory:
+              • it started from the current working directory: '/src/app'
+            """;
+
+        RepoQLWatchEnvClient.FailureReason(stderr)
+            .Should().Be("'/src/app' is not a RepoQL workspace — it has no .git directory and no .repoql marker.");
+    }
+
+    [Test]
+    public void FailureReason_FallsBackToTheLastProgressLine()
+    {
+        RepoQLWatchEnvClient.FailureReason("[rql] Launching host: rql serve\r\n[host 08:20:55] Loading index\r\n")
+            .Should().Be("[host 08:20:55] Loading index");
+        RepoQLWatchEnvClient.FailureReason(string.Empty).Should().BeEmpty();
+    }
+
+    [Test]
     public void BuildArguments_WithoutForward_RegistersAPlainRun()
     {
         RepoQLWatchEnvClient.BuildArguments("my-app", forward: null)

@@ -13,7 +13,7 @@ public static class RepoQLBuilderExtensions
     /// through the RepoQL workspace host for this application's directory.
     /// </summary>
     /// <remarks>
-    /// The host is discovered (or launched, detached) via the <c>rql</c> CLI. When no host can be
+    /// The host is discovered, or launched, through the <c>rql</c> CLI. When no host can be
     /// reached the resource reports the failure and the application runs with stock Aspire telemetry
     /// wiring — adding RepoQL never introduces a new way for the application to fail.
     /// </remarks>
