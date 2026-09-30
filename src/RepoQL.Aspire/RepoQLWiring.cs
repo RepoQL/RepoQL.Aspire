@@ -48,7 +48,14 @@ internal static class RepoQLWiring
         RedirectTelemetry(evt.Model.Resources, resource, run);
         RegisterCompletionHook(evt.Services, run, logger);
 
-        AnnotateDashboardLink(resource, run);
+        var dashboardLink = await RepoQLDashboardLinkClient.TryGetLinkAsync(appHostDirectory, run.BaseUrl, cancellationToken).ConfigureAwait(false);
+        if (dashboardLink is null)
+        {
+            logger.LogInformation(
+                "The RepoQL dashboard link could not be fetched, so the resource links to the host's origin. Run 'rql dashboard' to open the dashboard.");
+        }
+
+        AnnotateDashboardLink(resource, dashboardLink ?? run.BaseUrl.ToString().TrimEnd('/'));
 
         await notifications.PublishUpdateAsync(resource, snapshot => snapshot with
         {
@@ -68,12 +75,14 @@ internal static class RepoQLWiring
     /// The link must be a <see cref="ResourceUrlAnnotation"/>: when endpoints allocate, the
     /// orchestrator recomputes every resource's snapshot Urls from annotations and replaces the
     /// array wholesale — a URL published only on the snapshot is wiped before anyone sees it.
+    /// The keyed link from <c>rql dashboard --url</c> carries the dashboard's access key in its
+    /// fragment, so it is shown in the Aspire dashboard and never logged by this package.
     /// </remarks>
-    internal static void AnnotateDashboardLink(RepoQLResource resource, RepoQLWatchEnvResult run)
+    internal static void AnnotateDashboardLink(RepoQLResource resource, string url)
     {
         resource.Annotations.Add(new ResourceUrlAnnotation
         {
-            Url = run.BaseUrl.ToString().TrimEnd('/'),
+            Url = url,
             DisplayText = "RepoQL dashboard",
         });
     }

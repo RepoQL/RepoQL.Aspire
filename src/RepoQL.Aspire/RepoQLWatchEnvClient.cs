@@ -76,7 +76,7 @@ internal static class RepoQLWatchEnvClient
         return new RepoQLWatchEnvResult(environment, runId, baseUrl);
     }
 
-    private static async Task<(string Stdout, string Stderr, int ExitCode)> RunAsync(
+    internal static async Task<(string Stdout, string Stderr, int ExitCode)> RunAsync(
         string workingDirectory,
         IReadOnlyList<string> arguments,
         CancellationToken cancellationToken)
