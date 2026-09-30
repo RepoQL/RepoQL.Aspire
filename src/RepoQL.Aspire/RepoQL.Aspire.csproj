@@ -3,8 +3,8 @@
   <PropertyGroup>
     <IsPackable>true</IsPackable>
     <PackageId>RepoQL.Aspire</PackageId>
-    <Version>0.1.1</Version>
-    <Description>Stream every Aspire resource's OpenTelemetry into a RepoQL workspace host with one AddRepoQL() call — durable, SQL-queryable telemetry for agents while the Aspire dashboard keeps its live view.</Description>
+    <Version>0.1.2</Version>
+    <Description>Stream every Aspire resource's OpenTelemetry into a RepoQL workspace host with one AddRepoQL() call. Agents can query each run with SQL for about six hours after the AppHost stops, and the Aspire dashboard keeps its live view.</Description>
     <Authors>RepoQL</Authors>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageIcon>icon.png</PackageIcon>
