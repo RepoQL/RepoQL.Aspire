@@ -143,8 +143,8 @@ internal static class RepoQLWiring
     }
 
     /// <summary>
-    /// Marks the watch run complete when the application shuts down. Best effort — an abandoned
-    /// run is retired by the host's retention sweep.
+    /// Marks the watch run complete when the application shuts down. Best effort — if the AppHost dies
+    /// first, the host's retention sweep expires the run six hours after its last telemetry.
     /// </summary>
     private static void RegisterCompletionHook(IServiceProvider services, RepoQLWatchEnvResult run, ILogger logger)
     {

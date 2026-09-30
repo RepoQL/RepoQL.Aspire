@@ -75,7 +75,8 @@ rql query "SELECT * FROM watch.surface"            # everything queryable
 The workspace host deletes old telemetry when it starts and once an hour after that. These rules decide what it deletes:
 
 - **About six hours after the AppHost stops.** When the AppHost shuts down, the package marks its run complete. The host deletes a run once it has been complete for six hours.
-- **No age limit while the AppHost runs.** The six-hour clock starts when the run completes, however long the AppHost ran before that.
+- **The same if the AppHost dies without shutting down.** A debugger stop, `kill -9`, or a crash leaves the run open. The host expires an open run six hours after its last telemetry and deletes it in the same sweep.
+- **No age limit while telemetry flows.** A run stays open while its resources keep sending telemetry, however long the AppHost runs. If every resource goes quiet for six hours, the host expires the run even though the AppHost is still running. After that, RepoQL refuses the run's telemetry, so the dashboard stops receiving it too. Restart the AppHost to start a new run.
 - **A 512 MiB cap on the whole store.** If the store is still larger than 512 MiB after expired runs are deleted, the host moves it aside and starts an empty one. Queries no longer see telemetry recorded before then, even for a run that is still going.
 
 ## License
