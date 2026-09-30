@@ -17,11 +17,31 @@ internal static class RepoQLWiring
     internal const string RunIdHeaderName = "repoql-watch-run-id";
     internal const string RunIdResourceAttribute = "repoql.watch.run_id";
 
-    public static async Task WireAsync(
+    /// <summary>Registers a watch run; <see cref="RepoQLWatchEnvClient.RegisterRunAsync"/> in production.</summary>
+    internal delegate Task<RepoQLWatchEnvResult> RunRegistrar(
+        string workingDirectory,
+        string runName,
+        RepoQLForwardTarget? forward,
+        CancellationToken cancellationToken);
+
+    public static Task WireAsync(
         RepoQLResource resource,
         string appHostDirectory,
         string runName,
         BeforeStartEvent evt,
+        CancellationToken cancellationToken)
+        => WireAsync(resource, appHostDirectory, runName, evt, RepoQLWatchEnvClient.RegisterRunAsync, cancellationToken);
+
+    /// <summary>
+    /// Wires the application model to the run <paramref name="registerRun"/> registers, or leaves it on stock Aspire
+    /// wiring when registration fails. Only the application's own cancellation propagates.
+    /// </summary>
+    internal static async Task WireAsync(
+        RepoQLResource resource,
+        string appHostDirectory,
+        string runName,
+        BeforeStartEvent evt,
+        RunRegistrar registerRun,
         CancellationToken cancellationToken)
     {
         var logger = evt.Services.GetRequiredService<ILoggerFactory>().CreateLogger("RepoQL.Aspire");
@@ -31,10 +51,11 @@ internal static class RepoQLWiring
         RepoQLWatchEnvResult run;
         try
         {
-            run = await RepoQLWatchEnvClient.RegisterRunAsync(appHostDirectory, runName, forward, cancellationToken).ConfigureAwait(false);
+            run = await registerRun(appHostDirectory, runName, forward, cancellationToken).ConfigureAwait(false);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
+            // A cancellation the application did not ask for, such as an internal timeout, is a failure like any other.
             logger.LogWarning(
                 "RepoQL telemetry streaming is disabled: {Reason} The application runs with stock Aspire telemetry wiring.",
                 ex.Message);
