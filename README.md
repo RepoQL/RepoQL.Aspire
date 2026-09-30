@@ -22,7 +22,7 @@ That's the whole integration. On startup, every resource that would have exporte
 - **SQL over your telemetry.** `rql query "SELECT * FROM watch.summary()"` — or errors, span statistics, trace trees, and raw payloads. Ask `watch.surface` what's available.
 - **Agent-ready.** Any agent with the RepoQL MCP server (or the `rql` CLI) can interrogate the run: what failed, what was slow, what changed between runs.
 - **The dashboard keeps working.** Forwarding is a byte-verbatim OTLP/HTTP relay. Traces, structured logs, and metrics appear in the Aspire dashboard exactly as if the apps exported directly.
-- **A resource tile.** `AddRepoQL()` adds a `repoql` resource to the dashboard with the run id and a link to the RepoQL dashboard.
+- **A resource tile.** `AddRepoQL()` adds a `repoql` resource to the dashboard with the run id and a link that opens the RepoQL dashboard. The link carries the dashboard's access key, fetched with `rql dashboard --url`, so treat it like the link `rql dashboard` opens. The package never logs it.
 
 ## Requirements
 
